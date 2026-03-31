@@ -1,19 +1,17 @@
 # Repository Issue Difficulty Classifier
 
-A Flask web application that scrapes open GitHub issues from any public repository and automatically classifies each one as **Easy**, **Medium**, or **Hard** — using a multi-signal heuristic scoring algorithm built entirely without a machine learning model.
-
-The core idea: instead of manually triaging hundreds of GitHub issues to find beginner-friendly ones, this tool does it automatically by analysing the language used in issue titles, bodies, labels, and engagement metrics.
+A Flask web application that scrapes open GitHub issues from any public repository and automatically classifies each one as **Easy**, **Medium**, or **Hard** using a heuristic classifier.
 
 ---
 
 ## What it does
 
-1. Takes a GitHub repository URL as input (e.g. `https://github.com/numpy/numpy`)
-2. Scrapes all open issues via the GitHub REST API — skipping pull requests
-3. Runs each issue through a scoring algorithm that reads the title, body, labels, and comment count
-4. Classifies each issue as **Easy**, **Medium**, or **Hard** and stores it in a local SQLite database
-5. Serves a web UI where you can filter issues by difficulty, search by keyword, and filter by date range
-6. Caches results — re-submitting a repo you've already scraped loads instantly from the database with no redundant API calls
+1. Takes a GitHub repository URL as input (e.g. `https://github.com/scrapy/scrapy`).
+2. Scrapes all open issues via the GitHub REST API.
+3. Runs each issue through a scoring algorithm that reads the title, body, labels, and comment count.
+4. Classifies each issue as **Easy**, **Medium**, or **Hard** and stores it in a local SQLite database.
+5. Serves a web UI where you can filter issues by difficulty, search by keyword, and filter by date range and show  pie chart distribution.
+6. Re-submitting a repo you've already scraped loads instantly from the database.
 
 ---
 
@@ -21,12 +19,21 @@ The core idea: instead of manually triaging hundreds of GitHub issues to find be
 
 ```
 RepositoryIssueDifficultyClassifier/
-├── app.py           # Flask server — all API routes and SQLite database logic
-├── scraper.py       # GitHub API client — paginates and fetches all open issues
-├── classifier.py    # Scoring algorithm — the core logic that assigns Easy/Medium/Hard
-├── issues.db        # SQLite database, auto-created on first run
+├── app.py           
+├── scraper.py       
+├── classifier.py    
+├── issues.db        
 ├── templates/
-│   └── index.html   # Frontend UI — search, filter, browse classified issues
+│   └── index.html   
+├── webapp/
+    └── scrapper.py
+    └── classifier.py
+    └── app.py
+    └── templates/
+       └── index.html
+    └── static/
+        └── script.css
+        └── script.js
 ├── requirements.txt
 └── README.md
 ```
@@ -38,7 +45,7 @@ RepositoryIssueDifficultyClassifier/
 ### 1. Clone the repository
 
 ```bash
-git clone https://github.com/YOUR_USERNAME/RepositoryIssueDifficultyClassifier
+git clone https://github.com/ABK0003/RepositoryIssueDifficultyClassifier
 cd RepositoryIssueDifficultyClassifier
 ```
 
@@ -64,20 +71,18 @@ pip install -r requirements.txt
 
 ### 4. Set your GitHub token
 
-The app calls the GitHub REST API to fetch issues. Without a token, GitHub limits you to **60 requests per hour** — not enough to scrape a large repo. With a token, the limit rises to **5000 requests per hour**.
-
-A token is a scoped credential — it proves to GitHub that you are a real authenticated user without exposing your actual password. You can revoke it at any time without affecting your account.
+The app calls the GitHub REST API to fetch issues using tokens .  A token is a credential that validates your authenticity to GitHub. Without a token, GitHub limits you to **60 requests per hour** which with 100 issues per API call translate to 6000 issues. With a token, the limit rises to **5000 requests per hour** that means 500000 issue repo can also be scraped increasing our website functionality.
 
 Generate one at `https://github.com/settings/tokens`. Only the `public_repo` read scope is needed.
 
 **Windows PowerShell (current session only):**
 ```powershell
-$env:GITHUB_TOKEN = "your_token_here"
+$env:GITHUB_TOKEN = "enter token"
 ```
 
 **Windows PowerShell (permanent — survives terminal restarts):**
 ```powershell
-[System.Environment]::SetEnvironmentVariable("GITHUB_TOKEN", "your_token_here", "User")
+[System.Environment]::SetEnvironmentVariable("GITHUB_TOKEN", "enter token", "User")
 ```
 
 **macOS / Linux:**
@@ -100,20 +105,19 @@ Open `http://localhost:5000` in your browser.
 ## Usage
 
 1. Paste any public GitHub repository URL into the input field
-2. Click **Scrape** — the app fetches all open issues, classifies each one, and stores them
+2. Click **Fetch Issues** — the app fetches all open issues, classifies each one, and stores them
 3. Browse the results table, which shows title, difficulty badge, label, comment count, and a direct link to the issue on GitHub
 4. Use the filters at the top to narrow results:
    - **Difficulty** — show only Easy, Medium, or Hard issues
    - **Search** — full-text search across issue titles and bodies
    - **Date range** — filter by last updated date
-5. The stats bar at the top shows the Easy / Medium / Hard breakdown for the current view
-6. Submitting a repo URL that has already been scraped skips the API entirely and loads from the local database immediately
+5. Submitting a repo URL that has already been scraped skips the API entirely and loads from the local database immediately
 
 ---
 
 ## API endpoints
 
-The Flask server exposes four REST endpoints consumed by the frontend.
+The Flask server uses four REST endpoints consumed by the frontend.
 
 | Method | Endpoint | Description |
 |--------|----------|-------------|
@@ -125,7 +129,7 @@ The Flask server exposes four REST endpoints consumed by the frontend.
 ### `/api/scrape` request body
 
 ```json
-{ "url": "https://github.com/numpy/numpy" }
+{ "url": "https://github.com/scrapy/scrapy" }
 ```
 
 Returns a message confirming how many issues were added, or a message saying the repo was loaded from cache.
@@ -143,50 +147,44 @@ Returns a message confirming how many issues were added, or a message saying the
 ---
 
 ## How the classifier works
-
-This is the most important part of the project. Each issue is scored by `classifier.py` using a **multi-signal heuristic** — not a machine learning model. The score is a weighted sum of five independent signals, each justified by a real-world observation about how GitHub issues are written.
+Each issue is scored by `classifier.py` using a **heuristic**. The score is a weighted sum of five parameters including length of body, engagement, title_hardness etc.
 
 ### Why not use an ML model?
 
-With no labelled training data (no ground truth "this issue is Hard"), a supervised ML model is not trainable. A heuristic grounded in observable patterns — keyword usage, maintainer labels, discussion volume — is more transparent, explainable, and deployable with zero training data.
+With no labelled training data, a supervised ML model is not trainable. A heuristic uses patterns like keyword usage, body length etc is more explainable and easily implementable.
 
-### The five signals
+### The five parameters
 
-#### Signal 1 — GitHub labels (highest trust, acts as override)
+#### Parameter 1 — GitHub labels (highest weight)
 
-Maintainers label issues after reading the full codebase context. Their judgment is more reliable than any algorithm. If an issue has an explicit difficulty label, the score is overridden entirely:
+Developers label issues after reading the full codebase context. Their judgment is more reliable than any algorithm. If an issue has an explicit difficulty label, the score is overridden entirely:
 
 ```python
 HARD_LABELS = {
     "hard", "complex", "expert", "difficulty: hard", "high complexity",
     "needs expertise", "senior", "advanced", "critical", "security",
-    "performance", "breaking change", "needs investigation", "deep dive",
-    "research needed", "infrastructure", "scalability", "requires design"
+    "performance", "breaking change"
 }
 
 EASY_LABELS = {
     "good first issue", "beginner", "easy", "difficulty: easy",
-    "help wanted", "starter", "low hanging fruit", "first-timers-only",
-    "trivial", "minor", "quick fix", "hacktoberfest", "up for grabs",
-    "small", "beginner friendly", "easy fix", "newbie", "introductory",
-    "documentation", "typo", "good-first-pr", "entry level"
+    "help wanted", "starter", "low hanging fruit", 
 }
 
 MED_LABELS = {
     "difficulty: medium", "intermediate", "medium", "moderate",
     "some experience", "needs context", "contributor friendly",
-    "help needed", "second issue", "needs testing", "needs review",
-    "improvement", "enhancement", "refactor", "optimization"
+    "help needed", "second issue", "needs testing"
 }
 ```
 
-If a hard label is detected → score is forced to `4.0` (Hard).
-If an easy label is detected → score is forced to `0.0` (Easy).
-If a medium label is detected → score is forced to `1.0` (Medium).
+hard label → score is forced to `4.0` .
+easy label → score is forced to `0.0` .
+medium label → score is forced to `1.0`.
 
-#### Signal 2 — Title keyword matches (high trust, raw count)
+#### Signal 2 — Title keyword matches (high weight)
 
-The issue title is a deliberate compressed summary. Every word is chosen intentionally. This signal uses **raw match count**, not density — a title with one hard keyword scores `4.0` whether the title is 3 words or 15 words. Density would incorrectly penalise longer titles.
+The issue title is a short summary.  This parameter uses **match count**, a title with one hard keyword scores `4.0` whether the title is 3 words or 15 words. Each title label has very high priority because these words are carefully chosen and supposed represent the entire issue.  
 
 ```
 title_score = (4.0 × hard matches) − (2.0 × easy matches) + (1.0 × medium matches)
@@ -196,40 +194,40 @@ Hard keywords include: `segfault`, `memory leak`, `race condition`, `deadlock`, 
 
 Easy keywords include: `typo`, `documentation`, `readme`, `comment`, `spelling`, `formatting`, `cleanup`, `trivial`, `beginner`, `simple` and others.
 
-#### Signal 3 — Body keyword density (medium trust, normalised)
+#### Signal 3 — Body keyword density (medium weight)
 
-The issue body is noisier than the title — it contains boilerplate templates, pasted stack traces, auto-generated logs, and code snippets. Raw keyword count is misleading here because a 1000-word body naturally contains more matches than a 50-word body even for the same issue complexity.
+The issue body is larger than the title — it contains buffer words, auto-generated logs, and code snippets. Keyword count is misleading here because a 1000-word body naturally contains more matches than a 50-word body even for the same issue.
 
 The fix is to normalise by word count:
 
 ```
-body_hard_density = (hard matches in body / total body words) × 100
+hard_den = (hard matches in body / total body words) × 100
 body_score = (2.0 × body_hard_density) − (1.0 × body_easy_density) + (0.5 × body_med_density)
 ```
 
-The body signal is weighted at half the title signal (`2.0` vs `4.0` per match) to reflect its lower reliability.
+The body body is weighted at half the title density to reflect its lower reliability.
 
-#### Signal 4 — Comment count (low trust, tiebreaker)
+#### Signal 4 — Comment count (low weight)
 
-Issues that generate significant discussion tend to be harder — they require clarification, have competing approaches debated, or have failed fix attempts. A simple typo fix does not get fifteen replies.
+Issues that generate significant discussion tend to have large discussions associated with them.
 
 Comment count is log-scaled to capture diminishing returns — going from 0 to 5 comments is much more meaningful than going from 50 to 55. Normalised against a ceiling of 20:
 
 ```
-engagement = 1.0 × (log(comment_count + 1) / log(21))
+engagement = (log(comment_count + 1) / log(20))
 ```
 
-At 0 comments → contributes `0.0`. At 20 comments → contributes exactly `1.0`. Beyond 20 → still grows but slowly. The `log(21)` denominator is `log(ceiling + 1)` which squishes the output to a `0 → 1` range at the ceiling value.
+0 comments contributes `0.0` and 20 comments comments contributes exactly `1.0`. 
 
-#### Signal 5 — Body length (lowest trust, tiebreaker)
+#### Signal 5 — Body length (lowest weight)
 
-Longer issue descriptions suggest the reporter needed more context to explain the problem, which loosely correlates with complexity. A one-line issue body is probably simpler than a detailed 1500-character bug report with reproduction steps.
+Longer issue descriptions suggest the reporter needed more context to explain the problem, which correlates with complexity. A one-line issue body is simpler than a detailed 1500-character bug report.
 
 ```
-length_signal = 0.5 × (log(body_length + 1) / log(2001))
+length_signal = 0.5 × (log(body_length + 1) / log(2000))
 ```
 
-Contributes a maximum of `0.5` — purely a tiebreaker, not a primary signal. The `log(2001)` denominator normalises against a 2000-character ceiling using the same `log(ceiling + 1)` technique.
+The `log(2000)` denominator normalises against a 2000-character limit using the same `log(max + 1)` technique as used in comment count.
 
 ### Final score combination
 
@@ -237,20 +235,17 @@ Contributes a maximum of `0.5` — purely a tiebreaker, not a primary signal. Th
 score = (2.0 × title_score) + (1.0 × body_score) + engagement + length_signal
 ```
 
-Title is weighted `2×` body because it is a more reliable source of signal — compressed, deliberate, and noise-free.
-
 ### Hard floor
 
 If two or more distinct hard keywords appear anywhere in the issue (title + body combined), the score is floored at `0.6` regardless of easy keyword count:
 
 ```python
-MEDIUM_FLOOR = 0.6  # just above the 0.5 Easy/Medium boundary
+MEDIUM_FLOOR = 0.6 
 
 if total_hard_matches >= 2:
     score = max(score, MEDIUM_FLOOR)
 ```
-
-This prevents adversarial cases like *"fix this minor memory leak typo in the beginner-friendly readme"* from being classified as Easy. An issue that genuinely references two hard technical concepts cannot be a beginner task.
+Even if a task contains 10 eay keywords it cant be classified as easy if it has two hard key words associated with it so that is why this edge case is introduced
 
 The floor is `0.6` rather than exactly `0.5` to avoid floating point edge cases — a computed value of `0.4999...` would slip under the `< 0.5` Easy threshold without this buffer.
 
@@ -258,20 +253,20 @@ The floor is `0.6` rather than exactly `0.5` to avoid floating point edge cases 
 
 | Score | Classification | What it means |
 |-------|---------------|---------------|
-| < 0.5 | Easy | Easy keywords dominate, short body, low discussion — suitable for first-time contributors |
-| 0.5 – 3.0 | Medium | Mixed signals, some technical content — requires familiarity with the codebase |
-| ≥ 3.0 | Hard | Hard keywords present, detailed body, active discussion — requires deep domain expertise |
+| < 0.5 | Easy | Easy keywords dominate, short body, low discussion  |
+| 0.5 – 3.0 | Medium | Mixed signals, some technical content  |
+| ≥ 3.0 | Hard | Hard keywords present, detailed body, active discussion  |
 
 ---
 
-## Database schema
+## Database Structure
 
 Issues are stored in `issues.db`, a SQLite file created automatically when the app starts. No database setup is required.
 
 ```sql
 CREATE TABLE issues (
     id            INTEGER PRIMARY KEY AUTOINCREMENT,
-    repo          TEXT,           -- e.g. "numpy/numpy"
+    repo          TEXT,           -- e.g. "scrapy/scrapy"
     issue_no      INTEGER,        -- GitHub issue number
     labels        TEXT,           -- comma-separated label names
     title         TEXT,           -- issue title
@@ -282,15 +277,6 @@ CREATE TABLE issues (
     url           TEXT            -- direct link to the issue on GitHub
 )
 ```
-
-To wipe and re-classify a repo, delete its rows manually:
-
-```sql
-DELETE FROM issues WHERE repo = 'numpy/numpy';
-```
-
-Then re-submit the URL in the UI to trigger a fresh scrape and classification.
-
 ---
 
 ## Requirements
@@ -300,6 +286,7 @@ flask
 flask-cors
 requests
 pandas
+numpy
 ```
 
 Install with:
@@ -312,8 +299,8 @@ pip install -r requirements.txt
 
 ## Known limitations
 
-- Only scrapes **open** issues. Closed issues are not fetched or classified.
-- Classification is keyword-based — domain-specific repos (compilers, game engines, embedded systems) may have terminology not covered by the keyword lists. The lists in `classifier.py` can be extended for specific domains.
-- Re-scraping a repo that already exists in the database is skipped entirely to avoid redundant API calls. Delete the repo's rows from `issues.db` to force a fresh classification.
-- GitHub API rate limit is 5000 requests/hour with a token. At 100 issues per request, a repo with 5000+ issues will require 50+ API calls and may approach the limit in a single session.
-- The scoring algorithm is heuristic — it will misclassify edge cases. An issue titled *"fix segfault in beginner tutorial"* will score Medium due to the hard floor, which may or may not reflect the actual difficulty.
+- The time required for scraping is large for larger repositories. For example a numpy repo with 2100 issues took 75 s for scraping the first time which is very large infact it triggered the client to shut down request. To counter that right now, I have introduced a abortion timer which manually sets the time limit to 120 sec. This is a major issue as for any seemless user experience we need a time of response of 10 sec maximum.
+- Classification is keyword-based so domain-specific repos may have terminology not covered by the keyword lists although the lists in `classifier.py` can be extended for specific domains.
+-Labels need to have actual words that are present in github. To make it actually effective we need to added huge amounts of labels and keywords in our list which will have to beiteratively checked agaisnt each word. This makes the process very slow as mentioned in the first point.
+- Re-scraping a repo that already exists in the database is skipped entirely to avoid redundant API calls. However to initiate rescraping again you would have to manually delete the repo from database from backend. 
+- The scoring algorithm is heuristic so weights attached to each parameters are based on my understanding of teh issue that may very well be wrong in some edge cases. An issue titled *"fix segfault in beginner tutorial"* will score Medium due to the hard floor, which may or may not reflect the actual difficulty.
