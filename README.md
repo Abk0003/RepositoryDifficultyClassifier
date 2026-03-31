@@ -23,22 +23,17 @@ A Flask web application that scrapes open GitHub issues from any public reposito
 ## Project structure
 
 ```
-RepositoryIssueDifficultyClassifier/
-├── app.py           
-├── scraper.py       
-├── classifier.py    
-├── issues.db        
-├── templates/
-│   └── index.html   
+RepositoryIssueDifficultyClassifier/                      
 ├── webapp/
-    └── scrapper.py
-    └── classifier.py
-    └── app.py
-    └── templates/
-       └── index.html
-    └── static/
-        └── script.css
-        └── script.js
+|    └── scrapper.py
+|    └── classifier.py
+|    └── app.py
+|    └── templates/
+|       └── index.html
+|    └── static/
+|        └── script.css
+|        └── script.js
+|    └── issues.db
 ├── requirements.txt
 └── README.md
 ```
