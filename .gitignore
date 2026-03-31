@@ -1,0 +1,7 @@
+.venv/
+webapp/.env
+webapp/issues.db
+webapp/__pycache__/
+__pycache__/
+*.pyc
+*.pyo
