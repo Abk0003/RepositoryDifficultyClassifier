@@ -1,6 +1,15 @@
 # Repository Issue Difficulty Classifier
 
+<<<<<<< HEAD
 A Flask web application that scrapes open GitHub issues from any public repository and automatically classifies each one as **Easy**, **Medium**, or **Hard** using a heuristic classifier.
+=======
+A Flask web application that scrapes open GitHub issues from any public repository and automatically classifies each one as **Easy**, **Medium**, or **Hard** — using a multi-signal heuristic scoring algorithm built entirely without a machine learning model.
+
+The core idea: instead of manually triaging hundreds of GitHub issues to find beginner-friendly ones, this tool does it automatically by analysing the language used in issue titles, bodies, labels, and engagement metrics.
+<img width="1920" height="1200" alt="Screenshot (30)" src="https://github.com/user-attachments/assets/d252ff44-3ce8-485f-9279-70d57393c472" />
+<img width="1920" height="1200" alt="Screenshot (31)" src="https://github.com/user-attachments/assets/a1783414-d4b3-48d4-937f-88de1527efb9" />
+<img width="1920" height="1200" alt="Screenshot (32)" src="https://github.com/user-attachments/assets/c58c8da2-adc0-40fd-baa1-0a75b5a06530" />
+>>>>>>> 62e7892ed841a9233fc0e696eb612f04bb364dcd
 
 ---
 
