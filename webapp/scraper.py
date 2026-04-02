@@ -17,6 +17,7 @@ def scrapeIssues(repo_url):
         params = {"state":"open","per_page":100,"page":page}
         header = {"Authorization": f"token {GITHUB_TOKEN}"}
         response = requests.get(url,headers=header,params=params)
+        print(f"GITHUB STATUS: {response.status_code}")
         if response.status_code == 200:
             data = response.json()
         else :

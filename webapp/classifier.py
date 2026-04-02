@@ -1,85 +1,133 @@
+import re
 import math
 
-HARD = [
-    "segfault", "memory leak", "race condition", "deadlock", "undefined behavior",
-    "optimization", "refactor", "architecture", "performance", "concurrency",
-    "kernel", "compiler", "linker", "cryptography", "vulnerability", "exploit",
-    "distributed", "consensus", "replication", "sharding", "neural", "gradient"
-]
-MED = [
-    "bug", "fix", "api", "endpoint", "database", "query", "migration",
-    "authentication", "integration", "cache", "async", "thread", "socket",
-    "serialization", "parsing", "algorithm", "data structure"
-]
-EASY = [
-    "typo", "documentation", "readme", "comment", "spelling", "broken link",
-    "formatting", "style", "indent", "rename", "cleanup", "minor", "trivial",
-    "beginner", "good first issue", "help wanted", "simple", "easy"
-]
-HARD_LABELS = {
+HARD_LABELS = [
     "hard", "complex", "expert", "difficulty: hard",
     "high complexity", "needs expertise", "senior", "advanced",
     "critical", "security", "performance", "breaking change",
     "needs investigation", "deep dive", "research needed",
     "infrastructure", "scalability", "requires design"
-}
-
-EASY_LABELS = {
+]
+EASY_LABELS = [
     "good first issue", "beginner", "easy", "difficulty: easy",
     "help wanted", "starter", "low hanging fruit", "first-timers-only",
     "trivial", "minor", "quick fix", "hacktoberfest", "up for grabs",
     "small", "beginner friendly", "easy fix", "newbie", "introductory",
     "documentation", "typo", "good-first-pr", "entry level"
-}
-
-MED_LABELS = {
+]
+MED_LABELS = [
     "difficulty: medium", "intermediate", "medium",
     "moderate", "some experience", "needs context",
     "contributor friendly", "help needed", "second issue",
     "needs testing", "needs review", "improvement",
     "enhancement", "refactor", "optimization"
-}
-def matchCount(text, term_l):
+]
+
+SOL_PHRASES = ["we should", "fix would be", "proposed", "solution", "workaround", "suggest"]
+TRACE_WORDS = ["traceback", "error:", "exception:", "panic:", "at ", r"file \""]
+EXTS = [".py", ".js", ".ts", ".tsx", ".jsx", ".go", ".rs", ".c", ".cpp", ".h",
+        ".java", ".rb", ".yml", ".yaml", ".json", ".toml", ".md", ".css", ".html"]
+
+def match_label(labels, label_list):
+    lset = []
+    for l in labels.split(","):
+        if l.strip() is not None:
+            lset.append(l.strip().lower())
+    for l in lset:
+        if l in label_list:
+            return True
+    return False
+
+def count_files(body):
+    found = []
+    for word in body.split():
+        word = word.strip(r"(),;:\[]{}|`")
+        if "/" not in word:
+            continue
+        letters = word.split("/")
+        if len(letters) < 2:
+            continue
+        last = letters[-1]
+        dot = last.rfind(".")
+        if dot == -1:
+            continue
+        ext = last[dot:].lower()
+        if ext in EXTS and word not in found:
+            found.append(word)
+
+    return len(found)
+
+def countblocks(body):
     count = 0
-    for term in term_l:
-        if term in text:
-            count += 1
+    flag = False
+    for line in body.split("\n"):
+        if line.strip().startswith("```"):
+            if flag:
+                count += 1
+            flag = not flag
     return count
 
-def computeScore(title, body, comment_count, labels = ""):
-    title_c = title.lower()
-    body_c  = body.lower()
-    label_c = labels.lower()
-    set = {l.strip() for l in label_c.split(",") if l.strip()}
+def counttraces(body):
+    count = 0
+    for line in body.lower().split("\n"):
+        for word in TRACE_WORDS:
+            if word in line:
+                count += 1
+                break
+    return count
 
-    if set & HARD_LABELS:
-        return 4.0
-    if set & EASY_LABELS:
-        return 0.0
-    if set & MED_LABELS:
-        return 1.0
+def countrefs(body):
+    found = []
+    count = 0
+    for word in body.split():
+        if word.startswith("#"):
+            num = word[1:].strip(r".,;:)]}\"'")
+            if num.isdigit() and 1 <= len(num) <= 6 and num not in found:
+                found.append(num)
+    return len(found)
 
-    hard = matchCount(title_c, HARD)
-    easy = matchCount(title_c, EASY)
-    med  = matchCount(title_c, MED)
+def has_sol(body):
+    low = body.lower()
+    for phrase in SOL_PHRASES:
+        if phrase in low:
+            return True
+    return False
 
-    body_words = max(len(body_c.split()), 1)
-    hard_den = matchCount(body_c, HARD) / body_words * 100
-    easy_den = matchCount(body_c, EASY) / body_words * 100
-    med_den  = matchCount(body_c, MED)  / body_words * 100
+def computeScore(title,body,cc):
+    if body is None:
+         b = ""
+    else:
+        b = body
+    files = count_files(b)
+    blocks = countblocks(b)
+    traces = counttraces(b)
+    refs = countrefs(b)
+    sol = has_sol(b)
+    lenb = len(b)
 
-    engagement    =  (math.log1p(comment_count) / math.log1p(20))
-    length = 0.5 * (math.log1p(len(body)) / math.log1p(2000))
+    s = min(files/4,1.0)*3.0
+    c = min(traces/5,1.0)*2.0
+    d = min(blocks/3,1.0)*1.5
+    con = min(refs / 3, 1.0) * 1.5
+    dis = min(math.log1p(cc) / math.log1p(15), 1.0) * 2.0
+    bulk = min(lenb/ 2000, 1.0) * 1.0
+    cla = -1.5 if (sol and files <= 1 and traces == 0) else 0
 
-    score = (4.0 * hard - 2.0 * easy + 1.0 * med + 3.0 * hard_den - 1.0 * easy_den + 0.5 * med_den + engagement + length)
+    tech = s + c + d + con
+    nont = dis + bulk + cla
 
-    if (hard + matchCount(body_c, HARD)) >= 2:
-        score = max(score, 0.6)
+    if tech < 1.5:
+        nontechnical = min(nont, 1.5)
 
-    return score
+    return tech + nont
 
-def classify(title, body, comment_count, labels =""):
-    score = computeScore(title, body, comment_count,labels)
-    if score < 0.5:   return "Easy"
-    elif score < 2.0: return "Medium"
-    else:             return "Hard"
+def classify(title,body,comment_count,labels):
+    if match_label(labels, HARD_LABELS): return "Hard"
+    if match_label(labels, EASY_LABELS): return "Easy"
+    if match_label(labels, MED_LABELS):  return "Medium"
+
+    s = computeScore(title, body, comment_count)
+
+    if s < 2.0:  return "Easy"
+    if s < 3.0:  return "Medium"
+    return "Hard"

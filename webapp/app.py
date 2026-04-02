@@ -69,6 +69,7 @@ def scrape():
 
     try:
         issues = scrapeIssues(url)
+        print(f"SCRAPED: {len(issues)} issues")
         if not issues:
             return jsonify({"error": "No issues found"}), 404
     except Exception as e:
